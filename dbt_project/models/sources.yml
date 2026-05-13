@@ -1,0 +1,74 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw landing zone for source extracts (CRM, app logs, payments)."
+    schema: main
+    tables:
+      - name: raw_crm_customers
+        description: "Customer master from CRM."
+        columns:
+          - name: customer_id
+            tests:
+              - unique
+              - not_null
+          - name: email
+            tests:
+              - not_null
+
+      - name: raw_app_events
+        description: "Event log from application clients."
+        loaded_at_field: event_timestamp
+        freshness:
+          warn_after:  { count: 12, period: hour }
+          error_after: { count: 24, period: hour }
+        columns:
+          - name: event_id
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            tests:
+              - not_null
+
+      - name: raw_payments
+        description: "Payment transactions from the billing provider."
+        loaded_at_field: payment_timestamp
+        freshness:
+          warn_after:  { count: 6,  period: hour }
+          error_after: { count: 12, period: hour }
+        columns:
+          - name: payment_id
+            tests:
+              - unique
+              - not_null
+
+models:
+  - name: dim_customers
+    description: "Customer dimension."
+    columns:
+      - name: customer_sk
+        tests: [unique, not_null]
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: segment
+        tests:
+          - accepted_values:
+              values: ['Free', 'Pro', 'Business', 'Enterprise']
+
+  - name: fct_payments
+    description: "Payment fact table."
+    columns:
+      - name: payment_id
+        tests: [unique, not_null]
+      - name: customer_sk
+        tests:
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_sk
+
+  - name: kpi_daily_active_users
+    description: "Daily/weekly/monthly active users."
+    columns:
+      - name: date_day
+        tests: [unique, not_null]
